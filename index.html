@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>测试内容</title>
     <style>
         * {
@@ -15,6 +16,7 @@
             height: 100vh;
             overflow: hidden;
             background: linear-gradient(135deg, #e0f7ff, #c1e9ff, #a8d8ff);
+            touch-action: none; /* 禁止手机端默认触摸行为（如滚动、缩放） */
         }
 
         /* 水面画布 */
@@ -70,6 +72,28 @@
             border-radius: 12px;
             cursor: pointer;
         }
+
+        /* 手机端适配：调整按钮位置和大小 */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 32px;
+                margin-top: 40px;
+            }
+            .btn1 {
+                top: 180px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 14px 30px;
+                font-size: 16px;
+            }
+            .btn2 {
+                top: 300px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 16px 34px;
+                font-size: 17px;
+            }
+        }
     </style>
 </head>
 
@@ -90,8 +114,8 @@
 
         // 水面网格参数
         const gridSize = 8; // 网格大小，越小越精细
-        const cols = Math.floor(canvas.width / gridSize);
-        const rows = Math.floor(canvas.height / gridSize);
+        let cols = Math.floor(canvas.width / gridSize);
+        let rows = Math.floor(canvas.height / gridSize);
 
         // 两个高度场：当前帧和上一帧
         let current = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
@@ -101,8 +125,8 @@
         const damping = 0.98; // 阻尼系数（能量衰减）
         const tension = 0.5;  // 表面张力
 
-        // 鼠标位置
-        let mouse = {
+        // 鼠标/触摸位置
+        let pointer = {
             x: 0,
             y: 0,
             lastX: 0,
@@ -110,14 +134,36 @@
             isMoving: false
         };
 
+        // 处理鼠标移动
+        function handlePointerMove(x, y) {
+            pointer.lastX = pointer.x;
+            pointer.lastY = pointer.y;
+            pointer.x = x;
+            pointer.y = y;
+            pointer.isMoving = true;
+        }
+
         // 鼠标移动事件
         window.addEventListener('mousemove', (e) => {
-            mouse.lastX = mouse.x;
-            mouse.lastY = mouse.y;
-            mouse.x = e.clientX;
-            mouse.y = e.clientY;
-            mouse.isMoving = true;
+            handlePointerMove(e.clientX, e.clientY);
         });
+
+        // 触摸开始事件
+        window.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            pointer.lastX = touch.clientX;
+            pointer.lastY = touch.clientY;
+            pointer.x = touch.clientX;
+            pointer.y = touch.clientY;
+            pointer.isMoving = true;
+        }, { passive: false });
+
+        // 触摸移动事件
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // 阻止手机端默认滚动
+            const touch = e.touches[0];
+            handlePointerMove(touch.clientX, touch.clientY);
+        }, { passive: false });
 
         // 窗口大小改变时重新计算
         window.addEventListener('resize', () => {
@@ -131,18 +177,18 @@
 
         // 主循环
         function animate() {
-            // 鼠标移动时施加力
-            if (mouse.isMoving) {
-                const dx = mouse.x - mouse.lastX;
-                const dy = mouse.y - mouse.lastY;
+            // 鼠标/触摸移动时施加力
+            if (pointer.isMoving) {
+                const dx = pointer.x - pointer.lastX;
+                const dy = pointer.y - pointer.lastY;
                 const speed = Math.sqrt(dx * dx + dy * dy);
                 
-                // 鼠标移动越快，施加的力越大
+                // 移动越快，施加的力越大
                 const force = Math.min(speed * 0.5, 15);
                 
                 // 转换为网格坐标
-                const gridX = Math.floor(mouse.x / gridSize);
-                const gridY = Math.floor(mouse.y / gridSize);
+                const gridX = Math.floor(pointer.x / gridSize);
+                const gridY = Math.floor(pointer.y / gridSize);
                 
                 // 影响周围3x3的网格
                 for (let i = -1; i <= 1; i++) {
@@ -155,7 +201,7 @@
                     }
                 }
                 
-                mouse.isMoving = false;
+                pointer.isMoving = false;
             }
 
             // 计算下一帧水面高度（波动方程）
