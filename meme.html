@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测试内容</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(135deg, #e0f7ff, #c1e9ff, #a8d8ff);
+        }
+
+        /* 水面画布 */
+        #waterCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* 标题：居中 + 淡光发光 */
+        h1 {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: #0f4c81;
+            font-size: 50px;
+            font-weight: bold;
+            margin-top: 70px;
+            font-family: "微软雅黑", sans-serif;
+            text-shadow: 0 0 18px rgba(30, 144, 255, 0.3);
+        }
+
+        /* 按钮1：自定义位置 */
+        .btn1 {
+            position: fixed;
+            z-index: 2;
+            top: 270px;
+            left: 300px;
+            background: #30a2ff;
+            color: white;
+            padding: 16px 36px;
+            font-size: 18px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        /* 按钮2：自定义位置 */
+        .btn2 {
+            position: fixed;
+            z-index: 2;
+            top: 400px;
+            left: 850px;
+            background: #4fc3f7;
+            color: white;
+            padding: 18px 40px;
+            font-size: 19px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="waterCanvas"></canvas>
+
+    <h1>新世界！</h1>
+    <button class="btn1" onclick="alert('太棒了！')">点我试试</button>
+    <button class="btn2" onclick="alert('领取点券9999！')">领取点券</button>
+
+    <script>
+        const canvas = document.getElementById('waterCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 设置画布大小
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // 水面网格参数
+        const gridSize = 8; // 网格大小，越小越精细
+        const cols = Math.floor(canvas.width / gridSize);
+        const rows = Math.floor(canvas.height / gridSize);
+
+        // 两个高度场：当前帧和上一帧
+        let current = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
+        let previous = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
+
+        // 物理参数
+        const damping = 0.98; // 阻尼系数（能量衰减）
+        const tension = 0.5;  // 表面张力
+
+        // 鼠标位置
+        let mouse = {
+            x: 0,
+            y: 0,
+            lastX: 0,
+            lastY: 0,
+            isMoving: false
+        };
+
+        // 鼠标移动事件
+        window.addEventListener('mousemove', (e) => {
+            mouse.lastX = mouse.x;
+            mouse.lastY = mouse.y;
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.isMoving = true;
+        });
+
+        // 窗口大小改变时重新计算
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            cols = Math.floor(canvas.width / gridSize);
+            rows = Math.floor(canvas.height / gridSize);
+            current = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
+            previous = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
+        });
+
+        // 主循环
+        function animate() {
+            // 鼠标移动时施加力
+            if (mouse.isMoving) {
+                const dx = mouse.x - mouse.lastX;
+                const dy = mouse.y - mouse.lastY;
+                const speed = Math.sqrt(dx * dx + dy * dy);
+                
+                // 鼠标移动越快，施加的力越大
+                const force = Math.min(speed * 0.5, 15);
+                
+                // 转换为网格坐标
+                const gridX = Math.floor(mouse.x / gridSize);
+                const gridY = Math.floor(mouse.y / gridSize);
+                
+                // 影响周围3x3的网格
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        const x = gridX + i;
+                        const y = gridY + j;
+                        if (x >= 0 && x < cols && y >= 0 && y < rows) {
+                            current[x][y] -= force * (1 - Math.abs(i) * 0.3 - Math.abs(j) * 0.3);
+                        }
+                    }
+                }
+                
+                mouse.isMoving = false;
+            }
+
+            // 计算下一帧水面高度（波动方程）
+            const next = new Array(cols).fill(0).map(() => new Array(rows).fill(0));
+
+            for (let x = 1; x < cols - 1; x++) {
+                for (let y = 1; y < rows - 1; y++) {
+                    // 波动方程核心：每个点的高度受上下左右四个点影响
+                    next[x][y] = (
+                        current[x-1][y] +
+                        current[x+1][y] +
+                        current[x][y-1] +
+                        current[x][y+1]
+                    ) * tension - previous[x][y];
+                    
+                    // 应用阻尼（能量衰减）
+                    next[x][y] *= damping;
+                }
+            }
+
+            // 边界反弹处理
+            for (let x = 0; x < cols; x++) {
+                next[x][0] = next[x][1] * damping; // 顶部边界
+                next[x][rows-1] = next[x][rows-2] * damping; // 底部边界
+            }
+            for (let y = 0; y < rows; y++) {
+                next[0][y] = next[1][y] * damping; // 左边边界
+                next[cols-1][y] = next[cols-2][y] * damping; // 右边边界
+            }
+
+            // 绘制水面
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for (let x = 0; x < cols; x++) {
+                for (let y = 0; y < rows; y++) {
+                    const height = next[x][y];
+                    if (Math.abs(height) > 0.1) {
+                        // 根据高度计算颜色深浅
+                        const alpha = Math.min(Math.abs(height) * 0.1, 0.4);
+                        ctx.fillStyle = `rgba(100, 180, 255, ${alpha})`;
+                        ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+                    }
+                }
+            }
+
+            // 更新高度场
+            previous = current;
+            current = next;
+
+            requestAnimationFrame(animate);
+        }
+
+        // 启动动画
+        animate();
+    </script>
+</body>
+</html>
